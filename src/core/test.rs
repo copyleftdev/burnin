@@ -4,7 +4,7 @@ use crate::core::error::Result;
 use crate::core::hardware::HardwareInfo;
 use crate::core::config::TestConfig;
 
-/// Status of a test
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TestStatus {
     Pending,
@@ -24,7 +24,7 @@ impl TestStatus {
     }
 }
 
-/// Result of a test execution
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestResult {
     pub name: String,
@@ -35,7 +35,7 @@ pub struct TestResult {
     pub issues: Vec<TestIssue>,
 }
 
-/// Issue detected during a test
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestIssue {
     pub component: String,
@@ -44,7 +44,7 @@ pub struct TestIssue {
     pub action: Option<String>,
 }
 
-/// Severity of an issue
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum IssueSeverity {
     Low,
@@ -53,21 +53,21 @@ pub enum IssueSeverity {
     Critical,
 }
 
-/// Core trait for all test modules
+
 pub trait BurnInTest {
-    /// Get the name of the test
+    
     fn name(&self) -> &'static str;
     
-    /// Detect hardware information relevant to this test
+    
     fn detect_hardware(&self) -> Result<HardwareInfo>;
     
-    /// Estimate the duration of the test based on the configuration
+    
     fn estimate_duration(&self, config: &TestConfig) -> Duration;
     
-    /// Execute the test with the given configuration
+    
     fn execute(&self, config: &TestConfig) -> Result<TestResult>;
     
-    /// Clean up resources after the test
+    
     fn cleanup(&self) -> Result<()>;
 }
 

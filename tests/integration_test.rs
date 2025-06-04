@@ -86,32 +86,32 @@ fn test_config_parsing() {
 fn test_duration_parsing() {
     use burnin::core::config::TestConfig;
     
-    // Valid durations
+    
     assert!(TestConfig::parse_duration("5m").is_ok());
     assert!(TestConfig::parse_duration("2h").is_ok());
     assert!(TestConfig::parse_duration("1d").is_ok());
     
-    // Invalid durations
-    assert!(TestConfig::parse_duration("30s").is_err()); // Too short
-    assert!(TestConfig::parse_duration("8d").is_err()); // Too long
-    assert!(TestConfig::parse_duration("xyz").is_err()); // Invalid format
+    
+    assert!(TestConfig::parse_duration("30s").is_err()); 
+    assert!(TestConfig::parse_duration("8d").is_err()); 
+    assert!(TestConfig::parse_duration("xyz").is_err()); 
 }
 
 #[test]
 fn test_memory_size_parsing() {
     use burnin::core::config::TestConfig;
     
-    // Percentage
+    
     let (is_percent, value) = TestConfig::parse_memory_size("80%").unwrap();
     assert!(is_percent);
     assert_eq!(value, 80);
     
-    // Bytes
+    
     let (is_percent, value) = TestConfig::parse_memory_size("1GB").unwrap();
     assert!(!is_percent);
     assert!(value > 0);
     
-    // Invalid
+    
     assert!(TestConfig::parse_memory_size("0%").is_err());
     assert!(TestConfig::parse_memory_size("100%").is_err());
 }
