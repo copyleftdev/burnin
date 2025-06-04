@@ -1,6 +1,10 @@
-# Burnin
-
-A lightweight, portable CLI tool for comprehensive system burn-in testing across bare metal, VMs, and containers.
+<div align="center">
+  <img src="asset/logo.png" alt="Burnin Logo" width="200">
+  
+  # Burnin
+  
+  A lightweight, portable CLI tool for comprehensive system burn-in testing across bare metal, VMs, and containers.
+</div>
 
 ## Features
 
