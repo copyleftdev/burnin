@@ -1,0 +1,396 @@
+use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
+use serde_json::json;
+
+use crate::core::test::{BurnInTest, TestResult, TestStatus, TestIssue, IssueSeverity};
+use crate::core::config::TestConfig;
+use crate::core::hardware::HardwareInfo;
+use crate::core::error::Result;
+
+/// Memory validation test
+pub struct MemoryValidationTest;
+
+impl BurnInTest for MemoryValidationTest {
+    fn name(&self) -> &'static str {
+        "memory_validation"
+    }
+    
+    fn detect_hardware(&self) -> Result<HardwareInfo> {
+        // Reuse hardware detection from CPU test
+        let cpu_test = crate::tests::cpu::CpuStressTest;
+        cpu_test.detect_hardware()
+    }
+    
+    fn estimate_duration(&self, config: &TestConfig) -> Duration {
+        config.duration
+    }
+    
+    fn execute(&self, config: &TestConfig) -> Result<TestResult> {
+        let start_time = Instant::now();
+        
+        // Determine memory test size
+        let mut system = sysinfo::System::new();
+        system.refresh_memory();
+        
+        let available_memory = system.available_memory();
+        let test_size = (available_memory as f64 * (config.memory_test_size_percent as f64 / 100.0)) as usize;
+        
+        println!("Starting memory validation test using {} bytes", test_size);
+        
+        // Metrics collection
+        let error_count = Arc::new(Mutex::new(0));
+        let bandwidth_mbps = Arc::new(Mutex::new(0.0));
+        let latency_ns = Arc::new(Mutex::new(0.0));
+        
+        // Memory test patterns
+        let patterns = [
+            0x00, // All zeros
+            0xFF, // All ones
+            0xAA, // Alternating 10101010
+            0x55, // Alternating 01010101
+        ];
+        
+        // Test sequential access
+        let seq_result = test_sequential_access(test_size, &patterns, bandwidth_mbps.clone())?;
+        
+        // Test random access
+        let random_result = test_random_access(test_size, &patterns, latency_ns.clone())?;
+        
+        // Test walking bit patterns
+        let walking_result = test_walking_bits(test_size, error_count.clone())?;
+        
+        // Test multi-threaded access
+        let thread_result = test_multithreaded_access(test_size, config, error_count.clone())?;
+        
+        // Calculate final metrics
+        let final_error_count = *error_count.lock().unwrap();
+        let final_bandwidth = *bandwidth_mbps.lock().unwrap();
+        let final_latency = *latency_ns.lock().unwrap();
+        
+        // Calculate score (0-100)
+        let mut score = 100;
+        
+        // Penalize for errors
+        if final_error_count > 0 {
+            score = 0; // Any memory errors are critical
+        }
+        
+        // Penalize for poor bandwidth (relative to system capabilities)
+        // This is a simplified scoring - in a real implementation you'd compare to expected values
+        if final_bandwidth < 1000.0 {
+            score -= ((1000.0 - final_bandwidth) / 100.0).min(20.0) as u8;
+        }
+        
+        // Create issues if any
+        let mut issues = Vec::new();
+        
+        if final_error_count > 0 {
+            issues.push(TestIssue {
+                component: "memory".to_string(),
+                severity: IssueSeverity::Critical,
+                message: format!("Memory errors detected ({} errors)", final_error_count),
+                action: Some("Run extended memory diagnostics and consider replacing memory modules".to_string()),
+            });
+        }
+        
+        if !seq_result {
+            issues.push(TestIssue {
+                component: "memory".to_string(),
+                severity: IssueSeverity::High,
+                message: "Sequential memory access test failed".to_string(),
+                action: Some("Check for memory corruption or hardware issues".to_string()),
+            });
+        }
+        
+        if !random_result {
+            issues.push(TestIssue {
+                component: "memory".to_string(),
+                severity: IssueSeverity::Medium,
+                message: "Random memory access test failed".to_string(),
+                action: Some("Check for memory addressing issues".to_string()),
+            });
+        }
+        
+        if !walking_result {
+            issues.push(TestIssue {
+                component: "memory".to_string(),
+                severity: IssueSeverity::High,
+                message: "Walking bit pattern test failed".to_string(),
+                action: Some("Check for stuck bits in memory".to_string()),
+            });
+        }
+        
+        if !thread_result {
+            issues.push(TestIssue {
+                component: "memory".to_string(),
+                severity: IssueSeverity::Medium,
+                message: "Multi-threaded memory access test failed".to_string(),
+                action: Some("Check for memory contention issues".to_string()),
+            });
+        }
+        
+        // Create test result
+        let result = TestResult {
+            name: self.name().to_string(),
+            status: if issues.iter().any(|i| i.severity == IssueSeverity::Critical) {
+                TestStatus::Failed
+            } else {
+                TestStatus::Completed
+            },
+            score,
+            duration: start_time.elapsed(),
+            metrics: json!({
+                "memory_errors": final_error_count,
+                "bandwidth_mbps": final_bandwidth,
+                "latency_ns": final_latency,
+                "test_size_bytes": test_size,
+            }),
+            issues,
+        };
+        
+        Ok(result)
+    }
+    
+    fn cleanup(&self) -> Result<()> {
+        // Force garbage collection to free memory
+        drop(vec![0u8; 1]);
+        Ok(())
+    }
+}
+
+// Helper functions for memory testing
+
+fn test_sequential_access(
+    size: usize,
+    patterns: &[u8],
+    bandwidth: Arc<Mutex<f64>>,
+) -> Result<bool> {
+    // Allocate memory block
+    let mut memory = Vec::with_capacity(size);
+    memory.resize(size, 0);
+    
+    let mut success = true;
+    
+    for &pattern in patterns {
+        // Write pattern
+        let write_start = Instant::now();
+        for i in 0..size {
+            memory[i] = pattern;
+        }
+        let write_time = write_start.elapsed();
+        
+        // Read and verify
+        let read_start = Instant::now();
+        for i in 0..size {
+            if memory[i] != pattern {
+                success = false;
+                break;
+            }
+        }
+        let read_time = read_start.elapsed();
+        
+        // Calculate bandwidth
+        let total_bytes = size * 2; // Read + write
+        let total_time = write_time + read_time;
+        let mbps = (total_bytes as f64 / 1_000_000.0) / total_time.as_secs_f64();
+        
+        let mut bw = bandwidth.lock().unwrap();
+        *bw = mbps;
+    }
+    
+    Ok(success)
+}
+
+fn test_random_access(
+    size: usize,
+    patterns: &[u8],
+    latency: Arc<Mutex<f64>>,
+) -> Result<bool> {
+    // Allocate memory block
+    let mut memory = Vec::with_capacity(size);
+    memory.resize(size, 0);
+    
+    // Create random indices
+    let mut rng = StdRng::seed_from_u64(42); // Fixed seed for reproducibility
+    let mut indices: Vec<usize> = (0..size).collect();
+    indices.shuffle(&mut rng);
+    
+    let mut success = true;
+    
+    for &pattern in patterns {
+        // Write pattern in random order
+        let write_start = Instant::now();
+        for &i in &indices {
+            memory[i] = pattern;
+        }
+        let write_time = write_start.elapsed();
+        
+        // Read and verify in random order
+        let read_start = Instant::now();
+        for &i in &indices {
+            if memory[i] != pattern {
+                success = false;
+                break;
+            }
+        }
+        let read_time = read_start.elapsed();
+        
+        // Calculate average latency
+        let total_ops = indices.len() * 2; // Read + write
+        let total_time = write_time + read_time;
+        let ns_per_op = (total_time.as_nanos() as f64) / (total_ops as f64);
+        
+        let mut lat = latency.lock().unwrap();
+        *lat = ns_per_op;
+    }
+    
+    Ok(success)
+}
+
+fn test_walking_bits(
+    size: usize,
+    error_count: Arc<Mutex<usize>>,
+) -> Result<bool> {
+    // Allocate memory block
+    let mut memory = Vec::with_capacity(size);
+    memory.resize(size, 0);
+    
+    let mut success = true;
+    
+    // Walking 1's pattern
+    for bit in 0..8 {
+        let pattern = 1 << bit;
+        
+        // Write pattern
+        for i in 0..size {
+            memory[i] = pattern;
+        }
+        
+        // Read and verify
+        for i in 0..size {
+            if memory[i] != pattern {
+                let mut errors = error_count.lock().unwrap();
+                *errors += 1;
+                success = false;
+            }
+        }
+    }
+    
+    // Walking 0's pattern
+    for bit in 0..8 {
+        let pattern = !(1 << bit) & 0xFF;
+        
+        // Write pattern
+        for i in 0..size {
+            memory[i] = pattern;
+        }
+        
+        // Read and verify
+        for i in 0..size {
+            if memory[i] != pattern {
+                let mut errors = error_count.lock().unwrap();
+                *errors += 1;
+                success = false;
+            }
+        }
+    }
+    
+    Ok(success)
+}
+
+fn test_multithreaded_access(
+    size: usize,
+    config: &TestConfig,
+    error_count: Arc<Mutex<usize>>,
+) -> Result<bool> {
+    let thread_count = if config.threads == 0 {
+        num_cpus::get() as u32
+    } else {
+        config.threads
+    };
+    
+    // Allocate shared memory block
+    let memory = Arc::new(Mutex::new(vec![0u8; size]));
+    
+    // Create a flag to signal threads to stop
+    let running = Arc::new(Mutex::new(true));
+    let running_clone = running.clone();
+    
+    // Set up a timer to stop the test after a portion of the configured duration
+    let test_duration = config.duration / 4; // Use 1/4 of total time for multi-threaded test
+    let timer_thread = thread::spawn(move || {
+        thread::sleep(test_duration);
+        let mut running = running_clone.lock().unwrap();
+        *running = false;
+    });
+    
+    // Start threads
+    let handles: Vec<_> = (0..thread_count)
+        .map(|id| {
+            let memory = memory.clone();
+            let running = running.clone();
+            
+            thread::spawn(move || {
+                let mut rng = StdRng::seed_from_u64(id as u64);
+                let chunk_size = size / thread_count as usize;
+                let start = id as usize * chunk_size;
+                let end = if id == thread_count - 1 {
+                    size
+                } else {
+                    (id as usize + 1) * chunk_size
+                };
+                
+                while *running.lock().unwrap() {
+                    // Write to memory
+                    {
+                        let mut mem = memory.lock().unwrap();
+                        for i in start..end {
+                            mem[i] = rng.gen();
+                        }
+                    }
+                    
+                    // Small delay to simulate real-world access patterns
+                    thread::sleep(Duration::from_micros(10));
+                    
+                    // Read from memory
+                    {
+                        let mem = memory.lock().unwrap();
+                        for i in start..end {
+                            // Just read the memory, no verification in this test
+                            let _ = mem[i];
+                        }
+                    }
+                }
+            })
+        })
+        .collect();
+    
+    // Wait for all threads to complete
+    for handle in handles {
+        let _ = handle.join();
+    }
+    
+    // Wait for timer thread
+    let _ = timer_thread.join();
+    
+    // Check if any errors were reported
+    let errors = *error_count.lock().unwrap();
+    Ok(errors == 0)
+}
+
+// Extension trait for shuffling
+trait SliceExt {
+    fn shuffle<R: Rng>(&mut self, rng: &mut R);
+}
+
+impl<T> SliceExt for [T] {
+    fn shuffle<R: Rng>(&mut self, rng: &mut R) {
+        for i in (1..self.len()).rev() {
+            let j = rng.gen_range(0..=i);
+            self.swap(i, j);
+        }
+    }
+}

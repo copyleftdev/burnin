@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  burnin:
+    build: .
+    image: burnin:latest
+    container_name: burnin-test
+    # Run a quick test by default
+    command: ["quick"]
+    # Mount host system info (read-only)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # Optional: mount a directory for test output
+      - ./test-results:/test-results
+    # Required for hardware access
+    privileged: true
+    environment:
+      # Set any environment variables if needed
+      - RUST_LOG=info
+    # Uncomment to run specific tests
+    # command: ["custom", "--duration", "30m", "--components", "cpu,memory"]
+    
+  # Example: Run burn-in test and save results
+  burnin-json:
+    build: .
+    image: burnin:latest
+    container_name: burnin-json
+    command: ["-o", "/test-results/report.json", "-f", "json", "standard"]
+    volumes:
+      - ./test-results:/test-results
+    privileged: true
+    environment:
+      - RUST_LOG=info

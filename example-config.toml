@@ -1,0 +1,38 @@
+# Burn-In Tool Configuration Example
+
+# Test Duration (accepts formats like "15m", "30s", "1h")
+duration = "30m"
+
+# Stress level (0.0 to 1.0)
+stress_level = 0.8
+
+# Number of parallel threads (0 = auto-detect)
+threads = 0
+
+# Enable/disable specific tests
+cpu_enabled = true
+memory_enabled = true
+storage_enabled = true
+network_enabled = false
+thermal_enabled = true
+
+# CPU test specific settings
+cpu_workload_mix = "mixed"
+cpu_thread_count = 0
+
+# Memory test specific settings
+memory_pattern = "sequential"
+memory_test_percent = 75
+
+# Storage test specific settings
+storage_test_size = "1GB"
+storage_test_path = "/tmp/burnin_test"
+
+# Network test specific settings
+network_test_endpoints = ["8.8.8.8", "1.1.1.1"]
+network_bandwidth_test = true
+
+# Thermal monitoring settings
+thermal_monitor_interval = 5
+thermal_warning_threshold = 80
+thermal_critical_threshold = 95
