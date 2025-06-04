@@ -9,12 +9,12 @@ use rand::rngs::StdRng;
 use serde_json::json;
 use sysinfo::{System, DiskKind, Disks};
 
-use crate::core::hardware::{HardwareInfo, StorageDevice, StorageType};
+use crate::core::hardware::{HardwareInfo, StorageDevice, DiskType};
 use crate::core::test::{BurnInTest, TestResult, TestStatus, TestIssue, IssueSeverity};
 use crate::core::config::TestConfig;
 use crate::core::error::{Result, BurnInError};
 
-
+/// Storage I/O test
 pub struct StorageIoTest;
 
 impl BurnInTest for StorageIoTest {
@@ -37,9 +37,9 @@ impl BurnInTest for StorageIoTest {
         let disks = Disks::new_with_refreshed_list();
         for disk in &disks {
             let device_type = match disk.kind() {
-                DiskKind::SSD => StorageType::SSD,
-                DiskKind::HDD => StorageType::HDD,
-                _ => StorageType::Unknown,
+                DiskKind::SSD => DiskType::Ssd,
+                DiskKind::HDD => DiskType::Hdd,
+                _ => DiskType::Unknown,
             };
             
             storage_devices.push(StorageDevice {
@@ -115,7 +115,7 @@ impl BurnInTest for StorageIoTest {
             _all_successful &= rand_write_result;
             
             
-            let meta_result = test_metadata_operations(&test_file.parent().unwrap())?;
+            let meta_result = test_metadata_operations(test_file.parent().unwrap())?;
             _all_successful &= meta_result;
             
             
@@ -232,8 +232,7 @@ impl BurnInTest for StorageIoTest {
     }
 }
 
-
-
+/// Detects suitable test paths for storage I/O testing
 fn detect_test_paths() -> Result<Vec<PathBuf>> {
     
     let temp_dir = std::env::temp_dir();
@@ -258,7 +257,7 @@ fn detect_test_paths() -> Result<Vec<PathBuf>> {
     
     if paths.is_empty() {
         let current_dir = std::env::current_dir()
-            .map_err(|e| BurnInError::IoError(e))?;
+            .map_err(BurnInError::IoError)?;
         
         if is_writable(&current_dir) {
             paths.push(current_dir);
@@ -268,6 +267,7 @@ fn detect_test_paths() -> Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
+/// Checks if a path is writable
 fn is_writable(path: &Path) -> bool {
     
     let test_file = path.join(".burnin_write_test");
@@ -280,18 +280,26 @@ fn is_writable(path: &Path) -> bool {
     }
 }
 
+/// Tests sequential write performance
 fn test_sequential_write(
     path: &Path,
     size: u64,
     mbps: Arc<Mutex<f64>>,
 ) -> Result<bool> {
     
-    let file = File::create(path).map_err(|e| BurnInError::IoError(e))?;
+    let file = File::create(path).map_err(BurnInError::IoError)?;
     
+    let metadata = file.metadata().map_err(BurnInError::IoError)?;
+    let device_size = metadata.len();
+    
+    if size > device_size {
+        return Err(BurnInError::InsufficientResources(
+            "Test file size exceeds device size".to_string(),
+        ));
+    }
     
     let buffer_size = 1024 * 1024;
     let buffer = vec![0u8; buffer_size];
-    
     
     let start_time = Instant::now();
     let mut writer = io::BufWriter::new(file);
@@ -300,13 +308,11 @@ fn test_sequential_write(
     while remaining > 0 {
         let to_write = buffer_size.min(remaining as usize);
         writer.write_all(&buffer[..to_write])
-            .map_err(|e| BurnInError::IoError(e))?;
+            .map_err(BurnInError::IoError)?;
         remaining -= to_write as u64;
     }
     
-    
-    writer.flush().map_err(|e| BurnInError::IoError(e))?;
-    
+    writer.flush().map_err(BurnInError::IoError)?;
     
     let elapsed = start_time.elapsed();
     let throughput = (size as f64 / 1_000_000.0) / elapsed.as_secs_f64();
@@ -317,18 +323,26 @@ fn test_sequential_write(
     Ok(true)
 }
 
+/// Tests sequential read performance
 fn test_sequential_read(
     path: &Path,
     size: u64,
     mbps: Arc<Mutex<f64>>,
 ) -> Result<bool> {
     
-    let file = File::open(path).map_err(|e| BurnInError::IoError(e))?;
+    let file = File::open(path).map_err(BurnInError::IoError)?;
     
+    let metadata = file.metadata().map_err(BurnInError::IoError)?;
+    let file_size = metadata.len();
+    
+    if size > file_size {
+        return Err(BurnInError::InsufficientResources(
+            "Test file size exceeds file size".to_string(),
+        ));
+    }
     
     let buffer_size = 1024 * 1024;
     let mut buffer = vec![0u8; buffer_size];
-    
     
     let start_time = Instant::now();
     let mut reader = io::BufReader::new(file);
@@ -344,7 +358,6 @@ fn test_sequential_read(
         remaining -= to_read as u64;
     }
     
-    
     let elapsed = start_time.elapsed();
     let throughput = ((size - remaining) as f64 / 1_000_000.0) / elapsed.as_secs_f64();
     
@@ -354,38 +367,42 @@ fn test_sequential_read(
     Ok(true)
 }
 
+/// Tests random read performance
 fn test_random_read(
     path: &Path,
     size: u64,
     iops: Arc<Mutex<f64>>,
 ) -> Result<bool> {
     
-    let mut file = File::open(path).map_err(|e| BurnInError::IoError(e))?;
+    let mut file = File::open(path).map_err(BurnInError::IoError)?;
     
+    let metadata = file.metadata().map_err(BurnInError::IoError)?;
+    let file_size = metadata.len();
+    
+    if size > file_size {
+        return Err(BurnInError::InsufficientResources(
+            "Test file size exceeds file size".to_string(),
+        ));
+    }
     
     let buffer_size = 4 * 1024;
     let mut buffer = vec![0u8; buffer_size];
     
-    
     let mut rng = StdRng::seed_from_u64(42);
     let max_pos = size.saturating_sub(buffer_size as u64);
     let num_ops = 10000.min(size / buffer_size as u64);
-    
     
     let start_time = Instant::now();
     let mut ops_completed = 0;
     
     for _ in 0..num_ops {
         let pos = rng.gen_range(0..=max_pos);
-        file.seek(SeekFrom::Start(pos)).map_err(|e| BurnInError::IoError(e))?;
+        file.seek(SeekFrom::Start(pos)).map_err(BurnInError::IoError)?;
         
-        match file.read_exact(&mut buffer) {
-            Ok(_) => ops_completed += 1,
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
-            Err(e) => return Err(BurnInError::IoError(e)),
+        if file.read_exact(&mut buffer).is_ok() {
+            ops_completed += 1;
         }
     }
-    
     
     let elapsed = start_time.elapsed();
     let ops_per_sec = ops_completed as f64 / elapsed.as_secs_f64();
@@ -396,6 +413,7 @@ fn test_random_read(
     Ok(true)
 }
 
+/// Tests random write performance
 fn test_random_write(
     path: &Path,
     size: u64,
@@ -405,33 +423,37 @@ fn test_random_write(
     let mut file = OpenOptions::new()
         .write(true)
         .open(path)
-        .map_err(|e| BurnInError::IoError(e))?;
+        .map_err(BurnInError::IoError)?;
     
+    let metadata = file.metadata().map_err(BurnInError::IoError)?;
+    let device_size = metadata.len();
+    
+    if size > device_size {
+        return Err(BurnInError::InsufficientResources(
+            "Test file size exceeds device size".to_string(),
+        ));
+    }
     
     let buffer_size = 4 * 1024;
     let buffer = vec![0u8; buffer_size];
     
-    
     let mut rng = StdRng::seed_from_u64(43);
     let max_pos = size.saturating_sub(buffer_size as u64);
     let num_ops = 5000.min(size / buffer_size as u64);
-    
     
     let start_time = Instant::now();
     let mut ops_completed = 0;
     
     for _ in 0..num_ops {
         let pos = rng.gen_range(0..=max_pos);
-        file.seek(SeekFrom::Start(pos)).map_err(|e| BurnInError::IoError(e))?;
+        file.seek(SeekFrom::Start(pos)).map_err(BurnInError::IoError)?;
         
-        if let Ok(_) = file.write_all(&buffer) {
+        if file.write_all(&buffer).is_ok() {
             ops_completed += 1;
         }
     }
     
-    
-    file.flush().map_err(|e| BurnInError::IoError(e))?;
-    
+    file.flush().map_err(BurnInError::IoError)?;
     
     let elapsed = start_time.elapsed();
     let ops_per_sec = ops_completed as f64 / elapsed.as_secs_f64();
@@ -442,36 +464,74 @@ fn test_random_write(
     Ok(true)
 }
 
+/// Tests metadata operations
 fn test_metadata_operations(path: &Path) -> Result<bool> {
     
     let test_dir = path.with_file_name("burnin_metadata_test");
-    fs::create_dir_all(&test_dir).map_err(|e| BurnInError::IoError(e))?;
+    fs::create_dir_all(&test_dir).map_err(BurnInError::IoError)?;
     
+    let metadata = fs::metadata(&test_dir).map_err(BurnInError::IoError)?;
+    let _dir_size = metadata.len();
     
     for i in 0..100 {
         let file_path = test_dir.join(format!("file_{}.txt", i));
-        let mut file = File::create(&file_path).map_err(|e| BurnInError::IoError(e))?;
-        file.write_all(b"test").map_err(|e| BurnInError::IoError(e))?;
+        let mut file = File::create(&file_path).map_err(BurnInError::IoError)?;
+        file.write_all(b"test").map_err(BurnInError::IoError)?;
     }
     
-    
-    let entries = fs::read_dir(&test_dir).map_err(|e| BurnInError::IoError(e))?;
+    let entries = fs::read_dir(&test_dir).map_err(BurnInError::IoError)?;
     let mut count = 0;
     
     for entry in entries {
-        let entry = entry.map_err(|e| BurnInError::IoError(e))?;
-        let metadata = entry.metadata().map_err(|e| BurnInError::IoError(e))?;
+        let entry = entry.map_err(BurnInError::IoError)?;
+        let metadata = entry.metadata().map_err(BurnInError::IoError)?;
         
         if metadata.is_file() {
             count += 1;
         }
     }
     
-    
     let success = count == 100;
     
-    
-    fs::remove_dir_all(&test_dir).map_err(|e| BurnInError::IoError(e))?;
+    fs::remove_dir_all(&test_dir).map_err(BurnInError::IoError)?;
     
     Ok(success)
+}
+
+/// Tests file operations
+#[allow(dead_code)]
+fn test_file_ops(count: usize, cleanup: bool) -> Result<(usize, usize)> {
+    
+    let test_dir = PathBuf::from("/tmp/burnin_storage_test");
+    fs::create_dir_all(&test_dir).map_err(BurnInError::IoError)?;
+    
+    let metadata = fs::metadata(&test_dir).map_err(BurnInError::IoError)?;
+    let _dir_size = metadata.len();
+    
+    let entries = fs::read_dir(&test_dir).map_err(BurnInError::IoError)?;
+    let start_count = entries.count();
+    
+    for i in 0..count {
+        let path = test_dir.join(format!("test_file_{}", i));
+        fs::File::create(&path).map_err(BurnInError::IoError)?;
+    }
+    
+    let final_entries = fs::read_dir(&test_dir).map_err(BurnInError::IoError)?;
+    let final_count = final_entries.count();
+    
+    for entry in fs::read_dir(&test_dir).map_err(BurnInError::IoError)? {
+        let entry = entry.map_err(BurnInError::IoError)?;
+        let metadata = entry.metadata().map_err(BurnInError::IoError)?;
+        if metadata.is_file() {
+            fs::remove_file(entry.path()).ok();
+        }
+    }
+    
+    if cleanup {
+        fs::remove_dir_all(&test_dir).ok();
+    }
+    
+    fs::remove_dir_all(&test_dir).map_err(BurnInError::IoError)?;
+    
+    Ok((start_count, final_count))
 }

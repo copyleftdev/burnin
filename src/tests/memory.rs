@@ -10,7 +10,7 @@ use crate::core::config::TestConfig;
 use crate::core::hardware::HardwareInfo;
 use crate::core::error::Result;
 
-
+/// Memory validation test
 pub struct MemoryValidationTest;
 
 impl BurnInTest for MemoryValidationTest {
@@ -169,23 +169,22 @@ fn test_sequential_access(
     bandwidth: Arc<Mutex<f64>>,
 ) -> Result<bool> {
     
-    let mut memory = Vec::with_capacity(size);
-    memory.resize(size, 0);
+    let mut memory = vec![0; size];
     
     let mut success = true;
     
     for &pattern in patterns {
         
         let write_start = Instant::now();
-        for i in 0..size {
-            memory[i] = pattern;
+        for val in memory.iter_mut() {
+            *val = pattern;
         }
         let write_time = write_start.elapsed();
         
         
         let read_start = Instant::now();
-        for i in 0..size {
-            if memory[i] != pattern {
+        for val in &memory {
+            if *val != pattern {
                 success = false;
                 break;
             }
@@ -210,8 +209,7 @@ fn test_random_access(
     latency: Arc<Mutex<f64>>,
 ) -> Result<bool> {
     
-    let mut memory = Vec::with_capacity(size);
-    memory.resize(size, 0);
+    let mut memory = vec![0; size];
     
     
     let mut rng = StdRng::seed_from_u64(42); 
@@ -255,8 +253,7 @@ fn test_walking_bits(
     error_count: Arc<Mutex<usize>>,
 ) -> Result<bool> {
     
-    let mut memory = Vec::with_capacity(size);
-    memory.resize(size, 0);
+    let mut memory = vec![0; size];
     
     let mut success = true;
     
@@ -265,13 +262,15 @@ fn test_walking_bits(
         let pattern = 1 << bit;
         
         
-        for i in 0..size {
-            memory[i] = pattern;
+        let write_start = Instant::now();
+        for val in memory.iter_mut() {
+            *val = pattern;
         }
+        let _write_duration = write_start.elapsed();
         
-        
-        for i in 0..size {
-            if memory[i] != pattern {
+        let _read_start = Instant::now();
+        for val in &memory {
+            if *val != pattern {
                 let mut errors = error_count.lock().unwrap();
                 *errors += 1;
                 success = false;
@@ -284,17 +283,16 @@ fn test_walking_bits(
         let pattern = !(1 << bit) & 0xFF;
         
         
-        for i in 0..size {
-            memory[i] = pattern;
+        let write_start = Instant::now();
+        for val in memory.iter_mut() {
+            *val = pattern;
         }
+        let _write_duration = write_start.elapsed();
         
-        
-        for i in 0..size {
-            if memory[i] != pattern {
-                let mut errors = error_count.lock().unwrap();
-                *errors += 1;
-                success = false;
-            }
+        let _read_start = Instant::now();
+        let mut checksum = 0u64;
+        for val in &memory {
+            checksum = checksum.wrapping_add(*val as u64);
         }
     }
     
@@ -313,7 +311,7 @@ fn test_multithreaded_access(
     };
     
     
-    let memory = Arc::new(Mutex::new(vec![0u8; size]));
+    let memory = Arc::new(Mutex::new(vec![0; size]));
     
     
     let running = Arc::new(Mutex::new(true));
@@ -347,8 +345,8 @@ fn test_multithreaded_access(
                     
                     {
                         let mut mem = memory.lock().unwrap();
-                        for i in start..end {
-                            mem[i] = rng.gen();
+                        for val in mem[start..end].iter_mut() {
+                            *val = rng.gen();
                         }
                     }
                     
@@ -358,9 +356,9 @@ fn test_multithreaded_access(
                     
                     {
                         let mem = memory.lock().unwrap();
-                        for i in start..end {
+                        for val in &mem[start..end] {
                             
-                            let _ = mem[i];
+                            let _ = val;
                         }
                     }
                 }

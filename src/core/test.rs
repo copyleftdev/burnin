@@ -4,7 +4,7 @@ use crate::core::error::Result;
 use crate::core::hardware::HardwareInfo;
 use crate::core::config::TestConfig;
 
-
+/// The status of a test.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TestStatus {
     Pending,
@@ -16,15 +16,13 @@ pub enum TestStatus {
 }
 
 impl TestStatus {
+    /// Returns `true` if the test has failed.
     pub fn is_failure(&self) -> bool {
-        match self {
-            TestStatus::Failed => true,
-            _ => false,
-        }
+        matches!(self, TestStatus::Failed)
     }
 }
 
-
+/// The result of a test.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestResult {
     pub name: String,
@@ -35,7 +33,7 @@ pub struct TestResult {
     pub issues: Vec<TestIssue>,
 }
 
-
+/// An issue detected during a test.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestIssue {
     pub component: String,
@@ -44,7 +42,7 @@ pub struct TestIssue {
     pub action: Option<String>,
 }
 
-
+/// The severity of an issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum IssueSeverity {
     Low,
@@ -53,21 +51,21 @@ pub enum IssueSeverity {
     Critical,
 }
 
-
+/// A trait for burn-in tests.
 pub trait BurnInTest {
-    
+    /// Returns the name of the test.
     fn name(&self) -> &'static str;
     
-    
+    /// Detects the hardware required for the test.
     fn detect_hardware(&self) -> Result<HardwareInfo>;
     
-    
+    /// Estimates the duration of the test.
     fn estimate_duration(&self, config: &TestConfig) -> Duration;
     
-    
+    /// Executes the test.
     fn execute(&self, config: &TestConfig) -> Result<TestResult>;
     
-    
+    /// Cleans up after the test.
     fn cleanup(&self) -> Result<()>;
 }
 

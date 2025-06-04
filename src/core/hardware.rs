@@ -47,7 +47,7 @@ pub struct MemoryInfo {
 pub struct StorageDevice {
     pub name: String,
     pub model: String,
-    pub device_type: StorageType,
+    pub device_type: DiskType,
     pub size_bytes: u64,
     pub mount_point: Option<String>,
     pub filesystem: Option<String>,
@@ -56,24 +56,24 @@ pub struct StorageDevice {
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum StorageType {
-    HDD,
-    SSD,
-    NVMe,
-    Virtual,
+pub enum DiskType {
+    Hdd,
+    Ssd,
+    Nvme,
     Unknown,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VirtualizationType {
-    KVM,
-    VMware,
-    VirtualBox,
+    None,
+    Kvm,
+    Vmware,
+    Virtualbox,
     Xen,
-    HyperV,
+    Hyperv,
+    Lxc,
     Docker,
-    LXC,
     Unknown,
 }
 
@@ -107,7 +107,7 @@ impl SystemProfile {
         
         if let Some(virt_type) = &self.hardware_info.virtualization {
             match virt_type {
-                VirtualizationType::Docker | VirtualizationType::LXC => {
+                VirtualizationType::Docker | VirtualizationType::Lxc => {
                     
                     optimized.stress_level = (f64::from(optimized.stress_level) * 0.7).round() as u8;
                     optimized.thermal_monitoring = false;

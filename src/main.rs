@@ -343,7 +343,9 @@ fn print_hardware_info() -> Result<()> {
             println!("CPU Information:");
             println!("  Model: {}", hardware.cpu_info.model_name);
             println!("  Cores: {} physical, {} logical", hardware.cpu_info.physical_cores, hardware.cpu_info.logical_cores);
-            println!("  Frequency: {:.2} GHz", hardware.cpu_info.frequency_mhz as f64 / 1000.0);
+            if hardware.cpu_info.frequency_mhz > 0.0 {
+                println!("  Frequency: {:.2} GHz", hardware.cpu_info.frequency_mhz / 1000.0);
+            }
             
             println!("\nMemory Information:");
             println!("  Total: {:.2} GB", hardware.memory_info.total_bytes as f64 / 1024.0 / 1024.0 / 1024.0);

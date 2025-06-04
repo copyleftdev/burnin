@@ -34,7 +34,7 @@ impl BurnInTest for ThermalMonitorTest {
                     name: component.label().to_string(),
                     location: "Unknown".to_string(), 
                     current_temp_celsius: component.temperature(),
-                    critical_temp_celsius: component.critical().map(|t| t as f32),
+                    critical_temp_celsius: component.critical(),
                 });
             }
         }

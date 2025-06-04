@@ -117,7 +117,7 @@ impl BurnInTest for CpuStressTest {
                             },
                             1 => {
                                 
-                                matrix_multiply();
+                                matrix_operations();
                                 local_instructions += 1000;
                             },
                             2 => {
@@ -266,7 +266,7 @@ fn is_prime(n: u32) -> bool {
     true
 }
 
-fn matrix_multiply() {
+fn matrix_operations() {
     
     const SIZE: usize = 100;
     let a = vec![vec![1.0; SIZE]; SIZE];
@@ -275,8 +275,8 @@ fn matrix_multiply() {
     
     for i in 0..SIZE {
         for j in 0..SIZE {
-            for k in 0..SIZE {
-                c[i][j] += a[i][k] * b[k][j];
+            for (k, b_row) in b.iter().enumerate().take(SIZE) {
+                c[i][j] += a[i][k] * b_row[j];
             }
         }
     }
@@ -291,29 +291,41 @@ fn floating_point_ops() {
 }
 
 fn integer_arithmetic() {
+    // Integer operations
+    let mut v = vec![0; 10000];
     
-    let mut x = 1u64;
-    for _ in 0..100000 {
-        x = x.wrapping_mul(7).wrapping_add(3).wrapping_div(2).wrapping_sub(1);
+    // Initialize vector with pattern
+    for (i, val) in v.iter_mut().enumerate() {
+        *val = (i * 17) % 2;
+    }
+    
+    // Process vector
+    let mut _sum = 0i64;
+    for (i, &val) in v.iter().enumerate() {
+        if val == 1 {
+            _sum += i as i64; // Using i64 to avoid overflow
+        } else {
+            _sum -= i as i64; // Using i64 to avoid overflow
+        }
     }
 }
 
 fn branch_prediction() {
-    
-    let mut _sum: i64 = 0; 
+    // Test branch prediction effects
+    let mut _sum: i64 = 0; // Using i64 to avoid overflow
     let mut v = vec![0; 10000];
     
-    
-    for i in 0..10000 {
-        v[i] = (i * 17) % 2;
+    // Initialize vector with pattern
+    for (i, val) in v.iter_mut().enumerate() {
+        *val = (i * 17) % 2;
     }
     
-    
-    for i in 0..10000 {
-        if v[i] == 1 {
-            _sum += i as i64; 
+    // Process vector
+    for (i, &val) in v.iter().enumerate() {
+        if val == 1 {
+            _sum += i as i64; // Using i64 to avoid overflow
         } else {
-            _sum -= i as i64; 
+            _sum -= i as i64; // Using i64 to avoid overflow
         }
     }
 }

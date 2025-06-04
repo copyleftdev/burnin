@@ -101,17 +101,15 @@ fn test_duration_parsing() {
 fn test_memory_size_parsing() {
     use burnin::core::config::TestConfig;
     
-    
-    let (is_percent, value) = TestConfig::parse_memory_size("80%").unwrap();
-    assert!(is_percent);
+    // Test percentage parsing
+    let value = TestConfig::parse_size_str("80%", 100).unwrap();
     assert_eq!(value, 80);
     
+    // Test absolute value parsing  
+    let value = TestConfig::parse_size_str("1GB", 1_000_000_000).unwrap();
+    assert_eq!(value, 1_000_000_000);
     
-    let (is_percent, value) = TestConfig::parse_memory_size("1GB").unwrap();
-    assert!(!is_percent);
-    assert!(value > 0);
-    
-    
-    assert!(TestConfig::parse_memory_size("0%").is_err());
-    assert!(TestConfig::parse_memory_size("100%").is_err());
+    // Test invalid parsing
+    assert!(TestConfig::parse_size_str("0%", 100).is_err());
+    assert!(TestConfig::parse_size_str("101%", 100).is_err());
 }

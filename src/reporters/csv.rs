@@ -7,18 +7,18 @@ use crate::core::config::TestConfig;
 use crate::core::runner::TestSuite;
 use crate::reporters::Reporter;
 
-
+/// A reporter that outputs test results in CSV format.
 pub struct CsvReporter {
     output_file: Option<String>,
 }
 
 impl CsvReporter {
-    
+    /// Creates a new `CsvReporter` instance.
     pub fn new(output_file: Option<String>) -> Self {
         Self { output_file }
     }
-    
-    
+
+    /// Converts a `TestStatus` to a string.
     fn status_to_string(status: TestStatus) -> &'static str {
         match status {
             TestStatus::Completed => "PASS",
@@ -29,8 +29,8 @@ impl CsvReporter {
             TestStatus::Running => "RUNNING",
         }
     }
-    
-    
+
+    /// Converts an `IssueSeverity` to a string.
     fn severity_to_string(severity: IssueSeverity) -> &'static str {
         match severity {
             IssueSeverity::Critical => "CRITICAL",
@@ -39,8 +39,8 @@ impl CsvReporter {
             IssueSeverity::Low => "LOW",
         }
     }
-    
-    
+
+    /// Creates a `csv::Writer` instance.
     fn create_writer(&self) -> io::Result<Writer<Box<dyn Write>>> {
         match &self.output_file {
             Some(path) => {
@@ -56,19 +56,18 @@ impl CsvReporter {
 
 impl Reporter for CsvReporter {
     fn report_start(&self, _config: &TestConfig) {
-        
+        // No-op
     }
-    
+
     fn report_test_start(&self, _test_name: &str) {
-        
+        // No-op
     }
-    
+
     fn report_test_result(&self, _result: &TestResult) {
-        
+        // No-op
     }
-    
+
     fn report_suite_result(&self, suite: &TestSuite) {
-        
         let mut writer = match self.create_writer() {
             Ok(w) => w,
             Err(e) => {
@@ -76,53 +75,47 @@ impl Reporter for CsvReporter {
                 return;
             }
         };
-        
-        
-        if let Err(e) = writer.write_record(&[
+
+        // Write headers
+        if let Err(e) = writer.write_record([
             "Test Name", "Status", "Score", "Duration (s)", "Issues"
         ]) {
-            eprintln!("Error writing CSV header: {}", e);
-            return;
+            eprintln!("Failed to write CSV headers: {}", e);
         }
-        
-        
+
+        // Write test results
         for result in &suite.results {
-            
             let issues_str = result.issues.iter()
                 .map(|issue| format!("[{}] {}", Self::severity_to_string(issue.severity), issue.message))
                 .collect::<Vec<_>>()
                 .join("; ");
-            
-            if let Err(e) = writer.write_record(&[
+
+            if let Err(e) = writer.write_record([
                 &result.name,
                 Self::status_to_string(result.status),
                 &result.score.to_string(),
                 &result.duration.as_secs().to_string(),
                 &issues_str,
             ]) {
-                eprintln!("Error writing CSV record: {}", e);
-                return;
+                eprintln!("Failed to write test result: {}", e);
             }
         }
-        
-        
-        if let Err(e) = writer.write_record(&[""; 5]) {
-            eprintln!("Error writing CSV blank line: {}", e);
-            return;
+
+        // Add summary section
+        if let Err(e) = writer.write_record([""; 5]) {
+            eprintln!("Failed to write separator: {}", e);
         }
-        
-        
-        if let Err(e) = writer.write_record(&[
+
+        // Summary header
+        if let Err(e) = writer.write_record([
             "Summary", "", "", "", ""
         ]) {
-            eprintln!("Error writing CSV summary header: {}", e);
-            return;
+            eprintln!("Failed to write summary header: {}", e);
         }
-        
-        
+
         let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string());
-        
-        
+
+        // Summary records
         let summary_records = [
             ["System", &hostname, "", "", ""],
             ["Test Date", &suite.start_time.format("%Y-%m-%d").to_string(), "", "", ""],
@@ -133,64 +126,64 @@ impl Reporter for CsvReporter {
                 end.signed_duration_since(suite.start_time).num_seconds() as u64
             }).to_string(), "", "", ""],
         ];
-        
+
         for record in &summary_records {
             if let Err(e) = writer.write_record(record) {
-                eprintln!("Error writing CSV summary record: {}", e);
-                return;
+                eprintln!("Failed to write summary record: {}", e);
             }
         }
-        
-        
-        if let Err(e) = writer.write_record(&[""; 5]) {
-            eprintln!("Error writing CSV blank line: {}", e);
-            return;
-        }
-        
-        
-        if let Err(e) = writer.write_record(&[
-            "Metrics", "", "", "", ""
-        ]) {
-            eprintln!("Error writing CSV metrics header: {}", e);
-            return;
-        }
-        
-        if let Err(e) = writer.write_record(&[
-            "Test Name", "Metric", "Value", "", ""
-        ]) {
-            eprintln!("Error writing CSV metrics column headers: {}", e);
-            return;
-        }
-        
-        
-        for result in &suite.results {
-            if let serde_json::Value::Object(metrics) = &result.metrics {
-                for (key, value) in metrics {
-                    if let Err(e) = writer.write_record(&[
-                        &result.name,
-                        key,
-                        &value.to_string(),
-                        "",
-                        "",
-                    ]) {
-                        eprintln!("Error writing CSV metrics record: {}", e);
-                        return;
+
+        // Add metrics section if available
+        if suite.results.iter().any(|r| match &r.metrics {
+            serde_json::Value::Object(map) => !map.is_empty(),
+            _ => false,
+        }) {
+            if let Err(e) = writer.write_record([""; 5]) {
+                eprintln!("Failed to write separator: {}", e);
+            }
+
+            // Metrics header
+            if let Err(e) = writer.write_record([
+                "Metrics", "", "", "", ""
+            ]) {
+                eprintln!("Failed to write metrics header: {}", e);
+            }
+
+            if let Err(e) = writer.write_record([
+                "Test Name", "Metric", "Value", "", ""
+            ]) {
+                eprintln!("Failed to write metrics columns: {}", e);
+            }
+
+            // Write metrics
+            for result in &suite.results {
+                if let serde_json::Value::Object(metrics) = &result.metrics {
+                    for (key, value) in metrics {
+                        if let Err(e) = writer.write_record([
+                            &result.name,
+                            key,
+                            &value.to_string(),
+                            "",
+                            "",
+                        ]) {
+                            eprintln!("Failed to write metrics record: {}", e);
+                        }
                     }
                 }
             }
         }
-        
-        
+
+        // Flush writer
         if let Err(e) = writer.flush() {
             eprintln!("Error flushing CSV writer: {}", e);
         }
     }
-    
+
     fn report_warning(&self, _message: &str) {
-        
+        // No-op
     }
-    
+
     fn report_info(&self, _message: &str) {
-        
+        // No-op
     }
 }

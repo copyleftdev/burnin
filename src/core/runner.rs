@@ -7,7 +7,7 @@ use crate::core::hardware::SystemInfo;
 use crate::core::config::TestConfig;
 use crate::reporters::Reporter;
 
-
+/// A test suite contains the results of multiple tests
 #[derive(Debug)]
 pub struct TestSuite {
     pub results: Vec<TestResult>,
@@ -19,8 +19,14 @@ pub struct TestSuite {
     pub duration: std::time::Duration,
 }
 
+impl Default for TestSuite {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestSuite {
-    
+    /// Create a new test suite
     pub fn new() -> Self {
         Self {
             results: Vec::new(),
@@ -33,7 +39,7 @@ impl TestSuite {
         }
     }
     
-    
+    /// Finalize the test suite by calculating the overall score and status
     pub fn finalize(&mut self) {
         
         let end = chrono::Utc::now();
@@ -74,7 +80,7 @@ impl TestSuite {
     }
 }
 
-
+/// A burn-in test runner
 pub struct BurnInRunner {
     tests: Vec<Box<dyn BurnInTest + Send + Sync>>,
     config: TestConfig,
