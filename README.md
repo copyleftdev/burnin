@@ -92,14 +92,23 @@ burnin custom --duration 20m --components cpu memory --stress 8
 # Run all tests with higher stress level
 burnin custom --stress 9 --duration 1h
 
-# Run only storage tests with specific test path
-burnin custom --components storage --storage-path /mnt/test --storage-size 2GB
+# Run only storage tests with specific test path and 2GB file
+burnin custom --components storage --storage-path /mnt/test --storage-size 2048 --duration 10m
 
-# Run memory tests with specific size
-burnin custom --components memory --memory-size 80%
+# Run memory tests with specific size (80% of available memory)
+burnin custom --components memory --memory-size 80 --duration 5m
 
-# Run network tests with custom thresholds
-burnin custom --components network --latency-ms 50 --bandwidth-mbps 100
+# Run network tests (basic network testing)
+burnin custom --components network --duration 2m
+
+# Run with specific thread count
+burnin custom --threads 4 --duration 5m
+
+# Run with all components but only 8 threads
+burnin custom --duration 10m --threads 8
+
+# Run stress level 9 tests
+burnin custom --stress 9 --duration 30m
 ```
 
 ### Hardware Information
@@ -137,17 +146,8 @@ burnin full --format text --format json --output results.json
 ### Advanced Options
 
 ```bash
-# Run with specific thread count
-burnin custom --threads 4
-
-# Set custom thermal thresholds
-burnin custom --thermal-warning 75 --thermal-critical 85
-
 # Load configuration from file
-burnin custom --config my-config.toml
-
-# Specify custom test timeout
-burnin custom --timeout 2h
+burnin custom --config my-config.toml --duration 30m
 ```
 
 ## Test Components
