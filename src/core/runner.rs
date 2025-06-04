@@ -7,7 +7,7 @@ use crate::core::hardware::SystemInfo;
 use crate::core::config::TestConfig;
 use crate::reporters::Reporter;
 
-/// Collection of test results
+
 #[derive(Debug)]
 pub struct TestSuite {
     pub results: Vec<TestResult>,
@@ -20,7 +20,7 @@ pub struct TestSuite {
 }
 
 impl TestSuite {
-    /// Create a new test suite
+    
     pub fn new() -> Self {
         Self {
             results: Vec::new(),
@@ -33,9 +33,9 @@ impl TestSuite {
         }
     }
     
-    /// Calculate the overall score and status
+    
     pub fn finalize(&mut self) {
-        // Set end time and calculate duration
+        
         let end = chrono::Utc::now();
         self.end_time = Some(end);
         self.duration = (end - self.start_time).to_std().unwrap_or_default();
@@ -46,24 +46,24 @@ impl TestSuite {
             return;
         }
         
-        // Calculate weighted average score
+        
         let total_duration_secs: u64 = self.results.iter()
             .map(|r| r.duration.as_secs())
             .sum();
         
         if total_duration_secs == 0 {
-            // Equal weighting if all durations are 0
+            
             self.overall_score = (self.results.iter()
                 .map(|r| r.score as u32)
                 .sum::<u32>() / self.results.len() as u32) as u8;
         } else {
-            // Weight by duration
+            
             self.overall_score = (self.results.iter()
                 .map(|r| (r.score as u64 * r.duration.as_secs()) as u32)
                 .sum::<u32>() / total_duration_secs as u32) as u8;
         }
         
-        // Determine overall status
+        
         if self.results.iter().any(|r| r.status == TestStatus::Failed) {
             self.overall_status = TestStatus::Failed;
         } else if self.results.iter().any(|r| r.status == TestStatus::Partial) {
@@ -74,7 +74,7 @@ impl TestSuite {
     }
 }
 
-/// Test execution engine
+
 pub struct BurnInRunner {
     tests: Vec<Box<dyn BurnInTest + Send + Sync>>,
     config: TestConfig,
@@ -83,7 +83,7 @@ pub struct BurnInRunner {
 }
 
 impl BurnInRunner {
-    /// Create a new test runner
+    
     pub fn new(
         tests: Vec<Box<dyn BurnInTest + Send + Sync>>,
         config: TestConfig,
@@ -97,7 +97,7 @@ impl BurnInRunner {
         }
     }
     
-    /// Set up interrupt handler
+    
     pub fn setup_interrupt_handler(&self) -> Result<()> {
         let interrupted = self.interrupted.clone();
         
@@ -113,12 +113,12 @@ impl BurnInRunner {
         Ok(())
     }
     
-    /// Check if execution was interrupted
+    
     fn is_interrupted(&self) -> bool {
         *self.interrupted.lock().unwrap()
     }
     
-    /// Execute tests sequentially
+    
     pub fn execute_sequential(&mut self) -> Result<TestSuite> {
         let mut suite = TestSuite::new();
         
@@ -145,7 +145,7 @@ impl BurnInRunner {
                         issues: Vec::new(),
                     };
                     
-                    // Add the error as an issue
+                    
                     use crate::core::test::{TestIssue, IssueSeverity};
                     result.issues.push(TestIssue {
                         component: name.to_string(),
@@ -161,7 +161,7 @@ impl BurnInRunner {
             self.reporter.report_test_result(&result);
             suite.results.push(result);
             
-            // Clean up after the test
+            
             if let Err(e) = test.cleanup() {
                 self.reporter.report_warning(&format!("Failed to clean up after test {}: {}", name, e));
             }
@@ -173,14 +173,14 @@ impl BurnInRunner {
         Ok(suite)
     }
     
-    /// Execute compatible tests in parallel
+    
     pub fn execute_parallel(&mut self) -> Result<TestSuite> {
         let mut suite = TestSuite::new();
         
         self.reporter.report_start(&self.config);
         
-        // Group tests by compatibility
-        // For now, we'll just run CPU and memory tests together, and storage tests separately
+        
+        
         let mut cpu_memory_tests = Vec::new();
         let mut other_tests = Vec::new();
         
@@ -193,7 +193,7 @@ impl BurnInRunner {
             }
         }
         
-        // Execute CPU and memory tests in parallel
+        
         if !cpu_memory_tests.is_empty() {
             let config = self.config.clone();
             let interrupted = self.interrupted.clone();
@@ -223,7 +223,7 @@ impl BurnInRunner {
                                 issues: Vec::new(),
                             };
                             
-                            // Add the error as an issue
+                            
                             use crate::core::test::{TestIssue, IssueSeverity};
                             result.issues.push(TestIssue {
                                 component: name.to_string(),
@@ -238,7 +238,7 @@ impl BurnInRunner {
                     
                     reporter.report_test_result(&result);
                     
-                    // Clean up after the test
+                    
                     if let Err(e) = test.cleanup() {
                         reporter.report_warning(&format!("Failed to clean up after test {}: {}", name, e));
                     }
@@ -251,7 +251,7 @@ impl BurnInRunner {
             suite.results.extend(results);
         }
         
-        // Execute other tests sequentially
+        
         for test in other_tests {
             if self.is_interrupted() {
                 break;
@@ -273,7 +273,7 @@ impl BurnInRunner {
                         issues: Vec::new(),
                     };
                     
-                    // Add the error as an issue
+                    
                     use crate::core::test::{TestIssue, IssueSeverity};
                     result.issues.push(TestIssue {
                         component: name.to_string(),
@@ -289,7 +289,7 @@ impl BurnInRunner {
             self.reporter.report_test_result(&result);
             suite.results.push(result);
             
-            // Clean up after the test
+            
             if let Err(e) = test.cleanup() {
                 self.reporter.report_warning(&format!("Failed to clean up after test {}: {}", name, e));
             }
@@ -301,39 +301,39 @@ impl BurnInRunner {
         Ok(suite)
     }
     
-    /// Execute tests with recovery capabilities
+    
     pub fn execute_with_recovery(&mut self) -> Result<TestSuite> {
-        // Set up interrupt handler
+        
         self.setup_interrupt_handler()?;
         
-        // Execute tests based on configuration
+        
         if self.config.cpu_enabled && self.config.memory_enabled {
-            // Run compatible tests in parallel
+            
             self.execute_parallel()
         } else {
-            // Run tests sequentially
+            
             self.execute_sequential()
         }
     }
     
-    /// Execute all tests based on configuration
+    
     pub fn execute_all(&mut self) -> Result<TestSuite> {
-        // Set up interrupt handler
+        
         self.setup_interrupt_handler()?;
         
-        // Report start of testing
+        
         self.reporter.report_info("Starting burn-in tests");
         
-        // Choose execution strategy based on configuration
+        
         let result = if self.config.cpu_enabled && self.config.memory_enabled {
-            // Run compatible tests in parallel
+            
             self.execute_parallel()
         } else {
-            // Run tests sequentially
+            
             self.execute_sequential()
         };
         
-        // Report completion
+        
         match &result {
             Ok(suite) => {
                 let status_str = format!("{:?}", suite.overall_status);

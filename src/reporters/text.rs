@@ -7,19 +7,19 @@ use crate::core::config::TestConfig;
 use crate::core::runner::TestSuite;
 use crate::reporters::Reporter;
 
-/// Text reporter for console output
+
 pub struct TextReporter {
     verbose: bool,
     quiet: bool,
 }
 
 impl TextReporter {
-    /// Create a new text reporter
+    
     pub fn new(verbose: bool, quiet: bool) -> Self {
         Self { verbose, quiet }
     }
     
-    /// Format a duration in a human-readable format
+    
     fn format_duration(&self, duration: std::time::Duration) -> String {
         let total_secs = duration.as_secs();
         let hours = total_secs / 3600;
@@ -35,7 +35,7 @@ impl TextReporter {
         }
     }
     
-    /// Format a test status with color
+    
     fn format_status(&self, status: TestStatus) -> ColoredString {
         match status {
             TestStatus::Completed => "✓ PASS".green().bold(),
@@ -104,7 +104,7 @@ impl Reporter for TextReporter {
             println!("  Score: {}/100", result.score);
             println!("  Duration: {}", self.format_duration(result.duration));
             
-            // Print metrics
+            
             println!("  Metrics:");
             if let serde_json::Value::Object(metrics) = &result.metrics {
                 for (key, value) in metrics {
@@ -112,7 +112,7 @@ impl Reporter for TextReporter {
                 }
             }
             
-            // Print issues
+            
             if !result.issues.is_empty() {
                 println!("  Issues:");
                 for issue in &result.issues {
@@ -142,7 +142,7 @@ impl Reporter for TextReporter {
     
     fn report_suite_result(&self, suite: &TestSuite) {
         if self.quiet {
-            // In quiet mode, just print the overall result and score
+            
             println!("{} {}/100", 
                 self.format_status(suite.overall_status),
                 suite.overall_score);
@@ -156,7 +156,7 @@ impl Reporter for TextReporter {
         println!("Duration: {:?}", suite.duration);
         println!();
         
-        // Print individual test results
+        
         let max_name_len = suite.results.iter()
             .map(|r| r.name.len())
             .max()
@@ -175,7 +175,7 @@ impl Reporter for TextReporter {
             self.format_status(suite.overall_status),
             suite.overall_score);
         
-        // Print recommendations based on issues
+        
         let all_issues: Vec<_> = suite.results.iter()
             .flat_map(|r| r.issues.iter())
             .collect();
@@ -183,7 +183,7 @@ impl Reporter for TextReporter {
         if !all_issues.is_empty() {
             println!("\nRecommendations:");
             
-            // Sort issues by severity
+            
             let mut critical_issues: Vec<_> = all_issues.iter()
                 .filter(|i| i.severity == IssueSeverity::Critical)
                 .collect();
@@ -196,14 +196,14 @@ impl Reporter for TextReporter {
                 .filter(|i| i.severity != IssueSeverity::Critical && i.severity != IssueSeverity::High)
                 .collect();
             
-            // Limit to top issues if there are many
+            
             if critical_issues.len() + high_issues.len() + other_issues.len() > 5 {
                 critical_issues.truncate(2);
                 high_issues.truncate(2);
                 other_issues.truncate(1);
             }
             
-            // Print critical issues first
+            
             for issue in critical_issues {
                 println!("- {} - {}", "CRITICAL".red().bold(), issue.message);
                 if let Some(action) = &issue.action {
@@ -211,7 +211,7 @@ impl Reporter for TextReporter {
                 }
             }
             
-            // Print high severity issues
+            
             for issue in high_issues {
                 println!("- {} - {}", "HIGH".red(), issue.message);
                 if let Some(action) = &issue.action {
@@ -219,7 +219,7 @@ impl Reporter for TextReporter {
                 }
             }
             
-            // Print other issues
+            
             for issue in other_issues {
                 println!("- {}", issue.message);
                 if let Some(action) = &issue.action {

@@ -9,7 +9,7 @@ use crate::core::config::TestConfig;
 use crate::core::hardware::{HardwareInfo, ThermalSensor};
 use crate::core::error::Result;
 
-/// Thermal monitoring test
+
 pub struct ThermalMonitorTest;
 
 impl BurnInTest for ThermalMonitorTest {
@@ -18,21 +18,21 @@ impl BurnInTest for ThermalMonitorTest {
     }
     
     fn detect_hardware(&self) -> Result<HardwareInfo> {
-        // Reuse hardware detection from CPU test
+        
         let mut hardware_info = crate::tests::cpu::CpuStressTest.detect_hardware()?;
         
-        // Add thermal sensor detection
+        
         let _system = System::new_all();
         
         let mut thermal_sensors = Vec::new();
         
-        // In sysinfo 0.30, components are accessed through a separate struct
+        
         let components = Components::new_with_refreshed_list();
         for component in &components {
             if component.label().contains("temp") || component.label().contains("cpu") {
                 thermal_sensors.push(ThermalSensor {
                     name: component.label().to_string(),
-                    location: "Unknown".to_string(), // Would need platform-specific code for better detection
+                    location: "Unknown".to_string(), 
                     current_temp_celsius: component.temperature(),
                     critical_temp_celsius: component.critical().map(|t| t as f32),
                 });
@@ -51,7 +51,7 @@ impl BurnInTest for ThermalMonitorTest {
     fn execute(&self, config: &TestConfig) -> Result<TestResult> {
         let start_time = Instant::now();
         
-        // Skip thermal monitoring if disabled
+        
         if !config.thermal_monitoring {
             return Ok(TestResult {
                 name: self.name().to_string(),
@@ -63,7 +63,7 @@ impl BurnInTest for ThermalMonitorTest {
             });
         }
         
-        // Detect thermal sensors
+        
         let hardware_info = self.detect_hardware()?;
         let sensors = &hardware_info.thermal_sensors;
         
@@ -87,7 +87,7 @@ impl BurnInTest for ThermalMonitorTest {
         
         println!("Starting thermal monitoring with {} sensors", sensors.len());
         
-        // Metrics collection
+        
         let max_temp = Arc::new(Mutex::new(0.0f32));
         let min_temp = Arc::new(Mutex::new(100.0f32));
         let avg_temp = Arc::new(Mutex::new(0.0f32));
@@ -96,19 +96,19 @@ impl BurnInTest for ThermalMonitorTest {
         let warning_events = Arc::new(Mutex::new(0usize));
         let critical_events = Arc::new(Mutex::new(0usize));
         
-        // Create a flag to signal threads to stop
+        
         let running = Arc::new(Mutex::new(true));
         let running_clone = running.clone();
         
-        // Set up a timer to stop the test after the configured duration
-        let test_duration = config.duration; // Clone the duration to avoid borrowing config
+        
+        let test_duration = config.duration; 
         let timer_thread = thread::spawn(move || {
             thread::sleep(test_duration);
             let mut running = running_clone.lock().unwrap();
             *running = false;
         });
         
-        // Start monitoring thread
+        
         let monitor_thread = {
             let max_temp = max_temp.clone();
             let min_temp = min_temp.clone();
@@ -118,7 +118,7 @@ impl BurnInTest for ThermalMonitorTest {
             let critical_events = critical_events.clone();
             let running = running.clone();
             
-            // Clone config values needed in the thread to avoid borrowing config
+            
             let thermal_warning_threshold = config.thermal_warning_threshold;
             let thermal_critical_threshold = config.thermal_critical_threshold;
             let thermal_monitor_interval = config.thermal_monitor_interval;
@@ -129,16 +129,16 @@ impl BurnInTest for ThermalMonitorTest {
                 let mut readings = 0usize;
                 
                 while *running.lock().unwrap() {
-                    // Refresh component data
+                    
                     _system.refresh_all();
                     
-                    // Read temperatures from all sensors
-                    // In sysinfo 0.30, components are accessed through a separate struct
+                    
+                    
                     let components = Components::new_with_refreshed_list();
                     for component in &components {
                         let temp = component.temperature();
                         
-                        // Update metrics
+                        
                         {
                             let mut max = max_temp.lock().unwrap();
                             if temp > *max {
@@ -156,7 +156,7 @@ impl BurnInTest for ThermalMonitorTest {
                         total_temp += temp;
                         readings += 1;
                         
-                        // Check for warning/critical temperatures
+                        
                         if temp >= thermal_warning_threshold {
                             let mut warnings = warning_events.lock().unwrap();
                             *warnings += 1;
@@ -168,7 +168,7 @@ impl BurnInTest for ThermalMonitorTest {
                         }
                     }
                     
-                    // Update average temperature
+                    
                     if readings > 0 {
                         let mut avg = avg_temp.lock().unwrap();
                         *avg = total_temp / readings as f32;
@@ -177,23 +177,23 @@ impl BurnInTest for ThermalMonitorTest {
                         *count = readings;
                     }
                     
-                    // Sleep for the configured interval
+                    
                     thread::sleep(thermal_monitor_interval);
                 }
             })
         };
         
-        // Wait for timer thread
+        
         let _ = timer_thread.join();
         
-        // Signal monitoring thread to stop and wait for it
+        
         {
             let mut running_flag = running.lock().unwrap();
             *running_flag = false;
         }
         let _ = monitor_thread.join();
         
-        // Calculate final metrics
+        
         let final_max_temp = *max_temp.lock().unwrap();
         let final_min_temp = *min_temp.lock().unwrap();
         let final_avg_temp = *avg_temp.lock().unwrap();
@@ -201,10 +201,10 @@ impl BurnInTest for ThermalMonitorTest {
         let final_warnings = *warning_events.lock().unwrap();
         let final_criticals = *critical_events.lock().unwrap();
         
-        // Calculate score (0-100)
+        
         let mut score = 100;
         
-        // Penalize for high temperatures
+        
         if final_max_temp > config.thermal_warning_threshold {
             let over_warning = final_max_temp - config.thermal_warning_threshold;
             let warning_range = config.thermal_critical_threshold - config.thermal_warning_threshold;
@@ -212,10 +212,10 @@ impl BurnInTest for ThermalMonitorTest {
             score -= penalty;
         }
         
-        // Penalize for critical events
+        
         score -= (final_criticals as u8 * 10).min(50);
         
-        // Create issues if any
+        
         let mut issues = Vec::new();
         
         if final_criticals > 0 {
@@ -243,7 +243,7 @@ impl BurnInTest for ThermalMonitorTest {
             });
         }
         
-        // Create test result
+        
         let result = TestResult {
             name: self.name().to_string(),
             status: if issues.iter().any(|i| i.severity == IssueSeverity::Critical) {
@@ -269,7 +269,7 @@ impl BurnInTest for ThermalMonitorTest {
     }
     
     fn cleanup(&self) -> Result<()> {
-        // No specific cleanup needed for thermal monitoring
+        
         Ok(())
     }
 }

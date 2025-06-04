@@ -8,19 +8,19 @@ use crate::core::config::TestConfig;
 use crate::core::runner::TestSuite;
 use crate::reporters::Reporter;
 
-/// JSON reporter for machine-readable output
+
 pub struct JsonReporter {
     output_file: Option<String>,
     verbose: bool,
 }
 
 impl JsonReporter {
-    /// Create a new JSON reporter
+    
     pub fn new(output_file: Option<String>, verbose: bool) -> Self {
         Self { output_file, verbose }
     }
     
-    /// Convert test status to string
+    
     fn status_to_string(status: TestStatus) -> &'static str {
         match status {
             TestStatus::Completed => "PASS",
@@ -32,7 +32,7 @@ impl JsonReporter {
         }
     }
     
-    /// Write JSON to file or stdout
+    
     fn write_json(&self, json_value: Value) -> io::Result<()> {
         let json_string = serde_json::to_string_pretty(&json_value)?;
         
@@ -72,7 +72,7 @@ impl Reporter for JsonReporter {
             });
             
             if self.output_file.is_none() {
-                // Only print to stdout if not writing to file
+                
                 let _ = self.write_json(start_info);
             }
         }
@@ -87,7 +87,7 @@ impl Reporter for JsonReporter {
             });
             
             if self.output_file.is_none() {
-                // Only print to stdout if not writing to file
+                
                 let _ = self.write_json(test_start);
             }
         }
@@ -107,14 +107,14 @@ impl Reporter for JsonReporter {
             });
             
             if self.output_file.is_none() {
-                // Only print to stdout if not writing to file
+                
                 let _ = self.write_json(test_result);
             }
         }
     }
     
     fn report_suite_result(&self, suite: &TestSuite) {
-        // Convert test results to JSON
+        
         let test_results: Vec<Value> = suite.results.iter()
             .map(|result| {
                 json!({
@@ -135,14 +135,14 @@ impl Reporter for JsonReporter {
             })
             .collect();
         
-        // Get system information
+        
         let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string());
         
-        // Get system info using sysinfo
+        
         let mut system = System::new_all();
         system.refresh_all();
         
-        // Build recommendations from issues
+        
         let recommendations: Vec<Value> = suite.results.iter()
             .flat_map(|r| r.issues.iter())
             .map(|issue| {
@@ -155,7 +155,7 @@ impl Reporter for JsonReporter {
             })
             .collect();
         
-        // Build final JSON output
+        
         let final_result = json!({
             "summary": {
                 "result": Self::status_to_string(suite.overall_status),
@@ -170,14 +170,14 @@ impl Reporter for JsonReporter {
                                    System::os_version().unwrap_or_else(|| "Unknown".to_string())),
                     "cpu": system.global_cpu_info().brand().to_string(),
                     "memory_gb": system.total_memory() / 1024 / 1024,
-                    "virtualization": "Unknown", // Would need platform-specific detection
+                    "virtualization": "Unknown", 
                 }
             },
             "tests": test_results,
             "recommendations": recommendations,
         });
         
-        // Write to file or stdout
+        
         if let Err(e) = self.write_json(final_result) {
             eprintln!("Error writing JSON output: {}", e);
         }
@@ -192,7 +192,7 @@ impl Reporter for JsonReporter {
             });
             
             if self.output_file.is_none() {
-                // Only print to stdout if not writing to file
+                
                 let _ = self.write_json(warning);
             }
         }
@@ -207,7 +207,7 @@ impl Reporter for JsonReporter {
             });
             
             if self.output_file.is_none() {
-                // Only print to stdout if not writing to file
+                
                 let _ = self.write_json(info);
             }
         }

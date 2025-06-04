@@ -1,4 +1,4 @@
-// Core modules
+
 pub mod core {
     pub mod config;
     pub mod error;
@@ -7,7 +7,7 @@ pub mod core {
     pub mod test;
 }
 
-// Test modules
+
 pub mod tests {
     pub mod cpu;
     pub mod memory;
@@ -16,5 +16,5 @@ pub mod tests {
     pub mod thermal;
 }
 
-// Reporter modules
+
 pub mod reporters;
